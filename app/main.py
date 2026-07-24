@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.core.exceptions import ImageProcessingError
-from app.tools.img_enhance import router as enhance_router
+from app.tools.img_enhance_2 import router as enhance_router
 from app.tools.obb_detect import router as obb_detect_router
 from app.tools.img_mosaic import router as mosaic_router
 from app.tools.img_ortho import router as ortho_router

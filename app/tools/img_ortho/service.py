@@ -347,3 +347,98 @@ def orthorectify(
             dst.write(destination)
 
     return str(dst_path)
+
+
+# ============================================================
+#  配准模式
+# ============================================================
+
+
+def register_to_ref(src_path: str, ref_path: str) -> str:
+    """将 src 影像配准到 ref 参考影像。
+
+    通过重叠区计算像素偏移，然后修正 src 的地理坐标（不改变像素内容），
+    使两个影像在 GIS 中对齐。
+
+    Args:
+        src_path: 待配准的影像路径。
+        ref_path: 参考影像路径。
+
+    Returns:
+        配准后的输出 TIFF 路径。
+    """
+    from app.tools.img_registration import phase_correlate
+
+    with rasterio.open(src_path) as src, rasterio.open(ref_path) as ref:
+        src_data = src.read()
+        ref_data = ref.read()
+
+        res_x = src.transform.a
+        res_y = -src.transform.e
+
+        # 计算地理重叠区域（两个影像的交集）
+        ov_left = max(src.bounds.left, ref.bounds.left)
+        ov_bottom = max(src.bounds.bottom, ref.bounds.bottom)
+        ov_right = min(src.bounds.right, ref.bounds.right)
+        ov_top = min(src.bounds.top, ref.bounds.top)
+
+        if ov_right <= ov_left or ov_top <= ov_bottom:
+            raise OrthoError("待配准影像与参考影像无重叠区域")
+
+        # 计算重叠区在各自影像中的像素范围
+        def geo_to_pixel(transform, left, right, top, bottom):
+            col_off = int((left - transform.c) / transform.a)
+            row_off = int((top - transform.f) / transform.e)
+            col_end = int((right - transform.c) / transform.a)
+            row_end = int((bottom - transform.f) / transform.e)
+            return row_off, col_off, row_end, col_end
+
+        src_r0, src_c0, src_r1, src_c1 = geo_to_pixel(
+            src.transform, ov_left, ov_right, ov_top, ov_bottom)
+        ref_r0, ref_c0, ref_r1, ref_c1 = geo_to_pixel(
+            ref.transform, ov_left, ov_right, ov_top, ov_bottom)
+
+        # 裁剪到有效范围
+        src_r0 = max(0, src_r0); src_c0 = max(0, src_c0)
+        src_r1 = min(src_data.shape[1], src_r1)
+        src_c1 = min(src_data.shape[2], src_c1)
+        ref_r0 = max(0, ref_r0); ref_c0 = max(0, ref_c0)
+        ref_r1 = min(ref_data.shape[1], ref_r1)
+        ref_c1 = min(ref_data.shape[2], ref_c1)
+
+        ov_h = min(src_r1 - src_r0, ref_r1 - ref_r0)
+        ov_w = min(src_c1 - src_c0, ref_c1 - ref_c0)
+        if ov_h < 64 or ov_w < 64:
+            raise OrthoError(f"重叠区域太小 ({ov_h}x{ov_w})，无法配准")
+
+        src_patch = src_data[:, src_r0:src_r0 + ov_h, src_c0:src_c0 + ov_w]
+        ref_patch = ref_data[:, ref_r0:ref_r0 + ov_h, ref_c0:ref_c0 + ov_w]
+
+        # 计算偏移（不 warp 像素，只修正坐标）
+        d_row, d_col, response = phase_correlate(ref_patch, src_patch)
+
+        if abs(d_row) >= 0.5 or abs(d_col) >= 0.5:
+            # 修正 geotransform：像素偏移 → 地理坐标偏移
+            new_c = src.transform.c + d_col * res_x
+            new_f = src.transform.f - d_row * res_y
+            new_transform = rasterio.Affine(
+                src.transform.a, src.transform.b, new_c,
+                src.transform.d, src.transform.e, new_f,
+            )
+        else:
+            new_transform = src.transform
+
+        # 像素原样写出，只改坐标
+        profile = src.profile.copy()
+        profile.update(transform=new_transform, compress="lzw")
+
+        src_path_obj = Path(src_path)
+        dst_path = (
+            src_path_obj.parent
+            / f"{src_path_obj.stem}_registered{OUTPUT_EXTENSION}"
+        )
+
+        with rasterio.open(str(dst_path), "w", **profile) as dst:
+            dst.write(src_data)
+
+    return str(dst_path)

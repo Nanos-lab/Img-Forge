@@ -3,11 +3,12 @@
 POST /tools/enhance/ — 接口与 img_enhance 完全一致。
 """
 
+import os
 import shutil
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, UploadFile, File, Form
+from fastapi import APIRouter, BackgroundTasks, UploadFile, File, Form
 from fastapi.responses import FileResponse
 
 from app.core.config import ALLOWED_EXTENSIONS, MAX_UPLOAD_SIZE_BYTES, TEMP_DIR
@@ -53,6 +54,7 @@ async def enhance(
         default=1.0, ge=0.0, le=4.0,
         description="饱和度系数。1 原始值，0 完全灰度，上限 4",
     ),
+    background_tasks: BackgroundTasks = None,
 ) -> FileResponse:
     if not file.filename:
         raise EnhancementError("未提供文件名")
@@ -81,6 +83,8 @@ async def enhance(
             temp_input.unlink(missing_ok=True)
 
     output_name = Path(output_path).name
+    if background_tasks:
+        background_tasks.add_task(os.remove, output_path)
     return FileResponse(
         path=output_path,
         filename=output_name,

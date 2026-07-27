@@ -70,3 +70,11 @@ class OrthoError(ImageProcessingError):
         super().__init__(f"正射校正失败: {detail}")
 
 
+class ChangeDetectError(ImageProcessingError):
+    """变化检测处理失败。"""
+
+    def __init__(self, detail: str = "变化检测失败"):
+        self.detail = detail
+        super().__init__(f"变化检测失败: {detail}")
+
+

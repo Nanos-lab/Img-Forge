@@ -33,7 +33,8 @@ ImgForge/
 │       ├── obb_detect/          #   目标检测
 │       ├── img_mosaic/          #   影像拼接
 │       ├── img_registration/    #   相位相关配准（内部模块）
-│       └── img_ortho/           #   几何校正（正射校正 / 配准）
+│       ├── img_ortho/           #   几何校正（正射校正 / 配准）
+│       └── img_changedet/       #   变化检测
 ├── test/                        # 测试素材
 ├── requirements.txt
 └── README.md
@@ -49,6 +50,7 @@ ImgForge/
 | 目标检测 | `POST /tools/obb-detect/` | YOLOv8-OBB 旋转目标检测：飞机 / 舰船 / 港口 / 桥梁 |
 | 影像拼接 | `POST /tools/mosaic/` | 多 TIFF 地理参考拼接，重叠区域后覆盖前，支持相位相关精配准校正卫星定位误差 |
 | 几何校正 | `POST /tools/ortho/` | 正射校正（RPC）/ 图像配准（参考图），根据 `reference` 类型自动切换 |
+| 变化检测 | `POST /tools/changedet/` | 基于 TinyCD 深度学习模型的双时相遥感影像变化检测，输出 GeoJSON 格式变化区域 |
 
 ### 影像增强
 
@@ -148,11 +150,31 @@ curl -X POST http://localhost:8100/tools/ortho/ \
 | `dst_crs` | str | `"auto"` | 输出投影，正射模式；`"auto"`=CGCS2000 高斯-克吕格 |
 | `resolution` | float | 自动 | 输出分辨率（地理单位/像素），正射模式 |
 
+### 变化检测
+
+上传两期遥感影像（变化前 + 变化后），自动进行地理配准、分块推理和变化区域提取。基于 TinyCD 轻量化深度学习模型（EfficientNet-B4 骨干网络，290K 参数），输出 GeoJSON 格式的变化区域多边形。
+
+```bash
+curl -X POST http://localhost:8100/tools/changedet/ \
+  -F "old=@old.tif" \
+  -F "new=@new.tif" \
+  -o result.json
+```
+
+#### 参数
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `old` | file | — | 变化前遥感影像（.tif / .tiff） |
+| `new` | file | — | 变化后遥感影像（.tif / .tiff） |
+| `threshold` | float | Otsu 自动 | 变化概率二值化阈值 [0, 1] |
+| `min_area` | int | 自动 | 最小变化区域面积（像素） |
+
 ## 技术栈
 
 - **Web 框架**: FastAPI
-- **影像处理**: OpenCV（含相位相关配准、稠密光流）
+- **影像处理**: OpenCV（含相位相关配准）
 - **几何校正**: rasterio.warp 配合 RPC 模型（含 DEM 地形校正）
 - **TIFF 读写**: rasterio (GDAL)
 - **目标检测**: ultralytics (YOLOv8-OBB)
-- **数据校验**: Pydantic v2
+- **变化检测**: PyTorch + TinyCD（EfficientNet-B4）

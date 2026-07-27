@@ -8,11 +8,12 @@ from app.tools.img_enhance_2 import router as enhance_router
 from app.tools.obb_detect import router as obb_detect_router
 from app.tools.img_mosaic import router as mosaic_router
 from app.tools.img_ortho import router as ortho_router
+from app.tools.img_changedet import router as changedet_router
 
 app = FastAPI(
     title="ImgForge",
-    version="0.4.0",
-    description="模块化遥感影像处理 API —— 影像增强、目标检测、影像拼接、正射校正等工具集",
+    version="0.5.0",
+    description="模块化遥感影像处理 API —— 影像增强、目标检测、影像拼接、正射校正、变化检测等工具集",
 )
 
 # ---- 注册工具路由 ----
@@ -20,6 +21,7 @@ app.include_router(enhance_router)
 app.include_router(obb_detect_router)
 app.include_router(mosaic_router)
 app.include_router(ortho_router)
+app.include_router(changedet_router)
 
 
 # ---- 全局异常处理 ----

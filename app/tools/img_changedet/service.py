@@ -216,9 +216,10 @@ def detect_changes(
     print(f"Stitched prob map: {prob_map.shape[1]}x{prob_map.shape[0]}")
 
     # ---- Step 6: 变化提取 ----
+    # crop_offset 只在可视化时用，地理坐标直接用 transform 算（已经对准裁剪图）
     regions, binary_map = extract_changes(
         prob_map, transform,
-        crop_offset=crop_offset,
+        crop_offset=(0, 0),
         min_area=min_area,
         threshold=threshold,
     )
@@ -229,16 +230,41 @@ def detect_changes(
     geojson = build_geojson(regions, elapsed_ms)
     print(f"Changes: {len(regions)} regions in {elapsed_ms}ms")
 
-    # # ---- 临时：保存结果可视化 PNG ----
-    # from pathlib import Path as _P
-    # _vis = new_img.copy()
-    # for r in regions:
-    #     x, y, w, h = r.bbox_pixel
-    #     cv2.rectangle(_vis, (x, y), (x + w, y + h), (0, 0, 255), 2)
-    #     cv2.putText(_vis, f"#{r.id}", (x, max(y - 5, 10)),
-    #                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-    # _out_path = _P(new_path).parent / f"cd_result_{_P(new_path).stem}.png"
-    # cv2.imwrite(str(_out_path), cv2.cvtColor(_vis, cv2.COLOR_RGB2BGR))
-    # print(f"Result PNG saved: {_out_path}")
+    # ---- 临时：保存结果可视化 TIFF（用 GeoJSON 坐标绘制在原始 new 图上） ----
+    from pathlib import Path as _P
+    import rasterio as _rio
+    _out_path = _P(new_path).parent / f"cd_result_{_P(new_path).stem}.tif"
+    try:
+        with _rio.open(new_path) as _src:
+            _raw = _src.read()
+            _profile = _src.profile.copy()
+            _raw_tf = _src.transform
+            # 转 (H, W, 3) uint8 用于画框
+            if _raw.shape[0] >= 3:
+                _vis = np.transpose(_raw[:3], (1, 2, 0))
+            else:
+                _vis = np.stack([_raw[0]] * 3, axis=2)
+            if _vis.dtype == np.uint16:
+                _vis = (_vis / 256).astype(np.uint8)
+            elif _vis.dtype != np.uint8:
+                _vis = np.clip(_vis / (_vis.max() + 1e-10) * 255, 0, 255).astype(np.uint8)
+            _vis = np.ascontiguousarray(_vis)
+        for r in regions:
+            # 用 GeoJSON 坐标系中的经纬度转回像素坐标
+            lons = [pt[0] for pt in r.corners_geo]
+            lats = [pt[1] for pt in r.corners_geo]
+            rows, cols = _rio.transform.rowcol(_raw_tf, lons, lats)
+            x_min, x_max = min(cols), max(cols)
+            y_min, y_max = min(rows), max(rows)
+            _vis = cv2.rectangle(_vis, (x_min, y_min), (x_max, y_max), (0, 0, 255), 2)
+            _vis = cv2.putText(_vis, f"#{r.id}", (x_min, max(y_min - 5, 10)),
+                              cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+        _profile.update(count=3, dtype=np.uint8, compress="lzw")
+        _vis_chw = np.transpose(_vis, (2, 0, 1)).astype(np.uint8)
+        with _rio.open(str(_out_path), "w", **_profile) as _dst:
+            _dst.write(_vis_chw)
+        print(f"Result TIFF saved: {_out_path}")
+    except Exception as _e:
+        print(f"Save result TIFF failed: {_e}")
 
     return geojson

@@ -196,7 +196,7 @@ def detect_changes(
     t_start = time.perf_counter()
 
     # ---- Step 1: 粗配准 ----
-    old_img, new_img, transform, crop_offset, crs = _coarse_register(old_path, new_path)
+    old_img, new_img, transform, _, crs = _coarse_register(old_path, new_path)
     print(f"Coarse registration: {old_img.shape[1]}x{old_img.shape[0]}")
 
     # ---- Step 2: 精配准 ----
@@ -216,7 +216,6 @@ def detect_changes(
     print(f"Stitched prob map: {prob_map.shape[1]}x{prob_map.shape[0]}")
 
     # ---- Step 6: 变化提取 ----
-    # crop_offset 只在可视化时用，地理坐标直接用 transform 算（已经对准裁剪图）
     regions, binary_map = extract_changes(
         prob_map, transform,
         crop_offset=(0, 0),
@@ -230,16 +229,32 @@ def detect_changes(
     geojson = build_geojson(regions, elapsed_ms)
     print(f"Changes: {len(regions)} regions in {elapsed_ms}ms")
 
-    # ---- 临时：保存结果可视化 TIFF（用 GeoJSON 坐标绘制在原始 new 图上） ----
+    save_visualization_tiff(new_path, geojson)
+
+    return geojson
+
+
+def save_visualization_tiff(
+    tif_path: str,
+    geojson: dict,
+) -> str:
+    """在原始影像上绘制变化框，保存为可视化 TIFF。
+
+    Args:
+        tif_path: 原始 TIFF 路径。
+        geojson: 变化检测返回的 GeoJSON dict。
+
+    Returns:
+        输出的 TIFF 路径；失败返回空字符串。
+    """
     from pathlib import Path as _P
-    import rasterio as _rio
-    _out_path = _P(new_path).parent / f"cd_result_{_P(new_path).stem}.tif"
+
+    out_path = _P(tif_path).parent / f"cd_result_{_P(tif_path).stem}.tif"
     try:
-        with _rio.open(new_path) as _src:
+        with rasterio.open(tif_path) as _src:
             _raw = _src.read()
             _profile = _src.profile.copy()
-            _raw_tf = _src.transform
-            # 转 (H, W, 3) uint8 用于画框
+            _tf = _src.transform
             if _raw.shape[0] >= 3:
                 _vis = np.transpose(_raw[:3], (1, 2, 0))
             else:
@@ -249,22 +264,24 @@ def detect_changes(
             elif _vis.dtype != np.uint8:
                 _vis = np.clip(_vis / (_vis.max() + 1e-10) * 255, 0, 255).astype(np.uint8)
             _vis = np.ascontiguousarray(_vis)
-        for r in regions:
-            # 用 GeoJSON 坐标系中的经纬度转回像素坐标
-            lons = [pt[0] for pt in r.corners_geo]
-            lats = [pt[1] for pt in r.corners_geo]
-            rows, cols = _rio.transform.rowcol(_raw_tf, lons, lats)
+        features = geojson.get("features", [])
+        for f in features:
+            r_id = f.get("id", 0)
+            coords = f["geometry"]["coordinates"][0]
+            lons = [pt[0] for pt in coords[:-1]]
+            lats = [pt[1] for pt in coords[:-1]]
+            rows, cols = rasterio.transform.rowcol(_tf, lons, lats)
             x_min, x_max = min(cols), max(cols)
             y_min, y_max = min(rows), max(rows)
             _vis = cv2.rectangle(_vis, (x_min, y_min), (x_max, y_max), (0, 0, 255), 2)
-            _vis = cv2.putText(_vis, f"#{r.id}", (x_min, max(y_min - 5, 10)),
+            _vis = cv2.putText(_vis, f"#{r_id}", (x_min, max(y_min - 5, 10)),
                               cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
         _profile.update(count=3, dtype=np.uint8, compress="lzw")
         _vis_chw = np.transpose(_vis, (2, 0, 1)).astype(np.uint8)
-        with _rio.open(str(_out_path), "w", **_profile) as _dst:
+        with rasterio.open(str(out_path), "w", **_profile) as _dst:
             _dst.write(_vis_chw)
-        print(f"Result TIFF saved: {_out_path}")
+        print(f"Visualization TIFF saved: {out_path}")
+        return str(out_path)
     except Exception as _e:
-        print(f"Save result TIFF failed: {_e}")
-
-    return geojson
+        print(f"Save visualization TIFF failed: {_e}")
+        return ""

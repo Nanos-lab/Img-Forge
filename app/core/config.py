@@ -21,6 +21,9 @@ ALLOWED_EXTENSIONS = {".tif", ".tiff"}
 OUTPUT_SUFFIX = "_Enhance"
 OUTPUT_EXTENSION = ".tiff"
 
+# === 噪声抑制与边缘增强 ===
+DENOISE_OUTPUT_SUFFIX = "_Denoise"
+
 # === 默认处理参数（均 [-1, 1]，0 为中性） ===
 DEFAULT_BRIGHTNESS = 0.0
 DEFAULT_CONTRAST = 0.0

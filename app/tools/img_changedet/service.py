@@ -229,7 +229,8 @@ def detect_changes(
     geojson = build_geojson(regions, elapsed_ms)
     print(f"Changes: {len(regions)} regions in {elapsed_ms}ms")
 
-    #save_visualization_tiff(new_path, geojson)
+    # 可视化画在 new_path 上（GeoJSON 地理坐标 → new_path 像素坐标）
+    save_visualization_tiff(new_path, geojson)
 
     return geojson
 

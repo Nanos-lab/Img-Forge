@@ -30,7 +30,7 @@ from app.core.exceptions import DetectionError
 from app.tools.obb_detect.detector import Detector
 from app.tools.obb_detect.tiler import generate_tiles, get_image_transform_info
 from app.tools.obb_detect.merger import merge_detections
-from app.tools.obb_detect.exporter import build_geojson_dict
+from app.tools.obb_detect.exporter import build_geojson_dict, visualize  # noqa: F401 (可视化暂时注释)
 
 # Resolve model path relative to this module
 _MODULE_DIR = Path(__file__).parent
@@ -119,5 +119,13 @@ def detect_objects(
     geojson["metadata"]["elapsed_seconds"] = round(elapsed, 1)
     geojson["metadata"]["image_width"] = img_info["width"]
     geojson["metadata"]["image_height"] = img_info["height"]
+
+    # 生成可视化标注图（temp/obb_detect/{文件名}.png），失败不影响主检测结果返回
+    # 暂时注释，测试完毕后按需再启用
+    # try:
+    #     vis_path = visualize(str(tif_path), geojson)
+    #     geojson["metadata"]["visualization_path"] = vis_path
+    # except Exception as exc:
+    #     geojson["metadata"]["visualization_error"] = str(exc)
 
     return geojson

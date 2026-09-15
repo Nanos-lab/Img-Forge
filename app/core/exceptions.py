@@ -78,3 +78,9 @@ class ChangeDetectError(ImageProcessingError):
         super().__init__(f"变化检测失败: {detail}")
 
 
+class DenoiseError(ImageProcessingError):
+    """噪声抑制与边缘增强处理失败。"""
+
+    def __init__(self, detail: str = "噪声抑制与边缘增强处理失败"):
+        self.detail = detail
+        super().__init__(f"处理失败: {detail}")

@@ -35,15 +35,15 @@ def _validate_upload(filename: str, file_size: int) -> None:
     summary="遥感影像目标检测",
     description=(
         "对上传的遥感影像（TIFF 格式）进行 YOLOv8-OBB 旋转目标检测。"
-        "支持飞机、舰船、港口、桥梁四类目标，"
+        "支持飞机、舰船、港口、桥梁、大型车辆、小型车辆六类目标，"
         "采用滑动窗口分块策略处理大幅面影像，返回 GeoJSON 格式的检测结果。"
     ),
 )
 async def detect(
     file: UploadFile = File(..., description="待检测的遥感影像（.tif / .tiff）"),
     classes: str = Form(
-        default="0,1,7,8",
-        description="检测类别，逗号分隔的 DOTA ID。0:plane 1:ship 7:harbor 8:bridge",
+        default="0,1,7,8,9,10",
+        description="检测类别，逗号分隔的 DOTA ID。0:plane 1:ship 7:harbor 8:bridge 9:large-vehicle 10:small-vehicle",
     ),
     confidence: float = Form(
         default=0.25, ge=0.01, le=1.0,

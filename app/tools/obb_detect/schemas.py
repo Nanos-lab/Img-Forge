@@ -8,10 +8,10 @@ class DetectParams(BaseModel):
     """目标检测请求参数。"""
 
     classes: Optional[str] = Field(
-        default="0,1,7,8",
+        default="0,1,7,8,9,10",
         description=(
             "检测类别，逗号分隔的 DOTA 类别 ID。"
-            "0:plane 1:ship 7:harbor 8:bridge"
+            "0:plane 1:ship 7:harbor 8:bridge 9:large-vehicle 10:small-vehicle"
         ),
     )
     confidence: float = Field(

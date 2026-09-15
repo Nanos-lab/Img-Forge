@@ -30,6 +30,7 @@ ImgForge/
 │   └── tools/                   # 工具模块（每个工具一个文件夹）
 │       ├── img_enhance/         #   影像增强（旧）
 │       ├── img_enhance_2/       #   影像增强（Cesium 风格，当前启用）
+│       ├── img_denoise/         #   噪声抑制与边缘增强
 │       ├── obb_detect/          #   目标检测
 │       ├── img_mosaic/          #   影像拼接
 │       ├── img_registration/    #   相位相关配准（内部模块）
@@ -47,6 +48,7 @@ ImgForge/
 | 工具 | 路径 | 说明 |
 |------|------|------|
 | 影像增强 | `POST /tools/enhance/` | Cesium 风格色调增强：亮度 / 对比度 / 饱和度 |
+| 噪声抑制与边缘增强 | `POST /tools/denoise/` | 双边滤波保边降噪 + 反锐化蒙版边缘增强，逐波段处理，任意波段数通用 |
 | 目标检测 | `POST /tools/obb-detect/` | YOLOv8-OBB 旋转目标检测：飞机 / 舰船 / 港口 / 桥梁 |
 | 影像拼接 | `POST /tools/mosaic/` | 多 TIFF 地理参考拼接，重叠区域后覆盖前，支持相位相关精配准校正卫星定位误差 |
 | 几何校正 | `POST /tools/ortho/` | 正射校正（RPC）/ 图像配准（参考图），根据 `reference` 类型自动切换 |
@@ -73,6 +75,26 @@ curl -X POST http://localhost:8100/tools/enhance/ \
 | `brightness` | float | 1.0 | [0, 3] | 亮度，1 原始值，0 全黑 |
 | `contrast` | float | 1.0 | [0, 5] | 对比度，1 原始值，0 统一灰色 |
 | `saturation` | float | 1.0 | [0, 4] | 饱和度，1 原始值，0 完全灰度 |
+
+### 噪声抑制与边缘增强
+
+对遥感影像（TIFF）进行噪声抑制（双边滤波，保边去噪）和边缘增强（反锐化蒙版）。逐波段独立处理，不依赖颜色语义，单波段灰度图、RGB、多光谱等任意波段数的影像均可处理。输出影像保留原始的投影、分辨率和波段数。
+
+```bash
+curl -X POST http://localhost:8100/tools/denoise/ \
+  -F "file=@input.tif" \
+  -F "denoise=0.5" \
+  -F "sharpen=1.0" \
+  -o output_Denoise.tiff
+```
+
+#### 参数
+
+| 参数 | 类型 | 默认值 | 范围 | 说明 |
+|------|------|--------|------|------|
+| `file` | file | — | .tif/.tiff | 上传的遥感影像 |
+| `denoise` | float | 0.0 | [0, 1] | 降噪强度，0 不处理，1 最强（双边滤波） |
+| `sharpen` | float | 0.0 | [0, 3] | 锐化强度，0 不处理，值越大边缘增强越明显 |
 
 ### 目标检测
 

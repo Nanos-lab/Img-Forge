@@ -9,6 +9,7 @@ from app.tools.obb_detect import router as obb_detect_router
 from app.tools.img_mosaic import router as mosaic_router
 from app.tools.img_ortho import router as ortho_router
 from app.tools.img_changedet import router as changedet_router
+from app.tools.img_denoise import router as denoise_router
 
 app = FastAPI(
     title="ImgForge",
@@ -22,6 +23,7 @@ app.include_router(obb_detect_router)
 app.include_router(mosaic_router)
 app.include_router(ortho_router)
 app.include_router(changedet_router)
+app.include_router(denoise_router)
 
 
 # ---- 全局异常处理 ----

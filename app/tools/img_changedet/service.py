@@ -16,7 +16,7 @@ import numpy as np
 import rasterio
 
 from app.core.exceptions import ChangeDetectError
-from app.tools.img_registration import phase_correlate
+from app.shared.img_registration import phase_correlate
 from app.tools.img_changedet.predictor import get_predictor
 from app.tools.img_changedet.tiler import tile_pair, stitch_probability_map
 from app.tools.img_changedet.extractor import extract_changes, build_geojson

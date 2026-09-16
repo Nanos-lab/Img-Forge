@@ -84,3 +84,11 @@ class DenoiseError(ImageProcessingError):
     def __init__(self, detail: str = "噪声抑制与边缘增强处理失败"):
         self.detail = detail
         super().__init__(f"处理失败: {detail}")
+
+
+class PansharpenError(ImageProcessingError):
+    """全色锐化处理失败。"""
+
+    def __init__(self, detail: str = "全色锐化处理失败"):
+        self.detail = detail
+        super().__init__(f"全色锐化处理失败: {detail}")

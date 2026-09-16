@@ -367,7 +367,7 @@ def register_to_ref(src_path: str, ref_path: str) -> str:
     Returns:
         配准后的输出 TIFF 路径。
     """
-    from app.tools.img_registration import phase_correlate
+    from app.shared.img_registration import phase_correlate
 
     with rasterio.open(src_path) as src, rasterio.open(ref_path) as ref:
         src_data = src.read()

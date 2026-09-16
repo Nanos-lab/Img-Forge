@@ -23,17 +23,19 @@ uvicorn app.main:app --reload --port 8100
 ImgForge/
 ├── app/
 │   ├── main.py                  # FastAPI 入口，注册路由
-│   ├── core/                    # 公共模块
+│   ├── core/                    # 应用基础设施层
 │   │   ├── config.py            #   配置常量
 │   │   ├── exceptions.py        #   自定义异常
 │   │   └── responses.py         #   统一响应模型
+│   ├── shared/                  # 共享算法层（跨工具复用，无 API 端点）
+│   │   └── img_registration/    #   相位相关配准
 │   └── tools/                   # 工具模块（每个工具一个文件夹）
 │       ├── img_enhance/         #   影像增强（旧）
 │       ├── img_enhance_2/       #   影像增强（Cesium 风格，当前启用）
 │       ├── img_denoise/         #   噪声抑制与边缘增强
 │       ├── obb_detect/          #   目标检测
 │       ├── img_mosaic/          #   影像拼接
-│       ├── img_registration/    #   相位相关配准（内部模块）
+│       ├── img_pansharpen/      #   全色锐化（多光谱 + 全色融合）
 │       ├── img_ortho/           #   几何校正（正射校正 / 配准）
 │       └── img_changedet/       #   变化检测
 ├── test/                        # 测试素材
@@ -41,7 +43,7 @@ ImgForge/
 └── README.md
 ```
 
-每个工具模块独立一个文件夹，内部按 `router` / `service` / `schemas` 三层分离，互不侵入。
+每个工具模块独立一个文件夹，内部按 `router` / `service` / `schemas` 三层分离，互不侵入。详细的模块依赖方向、数据流、新增模块规范见 [DEVELOPMENT.md](DEVELOPMENT.md)。
 
 ## 工具列表
 
@@ -51,6 +53,7 @@ ImgForge/
 | 噪声抑制与边缘增强 | `POST /tools/denoise/` | 双边滤波保边降噪 + 反锐化蒙版边缘增强，逐波段处理，任意波段数通用 |
 | 目标检测 | `POST /tools/obb-detect/` | YOLOv8-OBB 旋转目标检测：飞机 / 舰船 / 港口 / 桥梁 |
 | 影像拼接 | `POST /tools/mosaic/` | 多 TIFF 地理参考拼接，重叠区域后覆盖前，支持相位相关精配准校正卫星定位误差 |
+| 全色锐化 | `POST /tools/pansharpen/` | 低分辨率多光谱 + 高分辨率全色融合，基于 Gram-Schmidt 算法，兼顾光谱与空间细节 |
 | 几何校正 | `POST /tools/ortho/` | 正射校正（RPC）/ 图像配准（参考图），根据 `reference` 类型自动切换 |
 | 变化检测 | `POST /tools/changedet/` | 基于 TinyCD 深度学习模型的双时相遥感影像变化检测，输出 GeoJSON 格式变化区域 |
 
@@ -132,6 +135,34 @@ curl -X POST http://localhost:8100/tools/mosaic/ \
 |------|--------|------|
 | `files` | — | 多个 .tif/.tiff 文件，至少 1 个 |
 
+> **注意**：当前实现假设所有输入影像分辨率一致（画布分辨率取第一张影像的分辨率，其余影像按地理坐标计算像素偏移后直接贴入，不做重采样）。如果输入影像分辨率不一致，贴入位置会因缺少重采样而产生偏差。
+
+### 全色锐化
+
+上传配准好的低分辨率多光谱影像（MS）和高分辨率全色影像（Pan），基于 **Gram-Schmidt 算法**融合为高分辨率多光谱影像，兼顾光谱信息与空间细节。MS 会自动重采样对齐到 Pan 的地理网格，输出分辨率与波段数与 Pan/MS 保持一致（空间分辨率=Pan，光谱=MS）。
+
+处理流程：
+1. 校验 MS / Pan 的 CRS 一致性，Pan 必须为单波段，且 **MS 的地理范围必须完全覆盖 Pan**（不要求分辨率一致，但范围不能只有部分重叠或完全不重叠，否则直接拒绝，避免融合结果被无效区域的统计量污染）
+2. 将 MS 重采样（cubic）到 Pan 的地理网格，解决分辨率对齐问题
+3. 构造合成全色分量 I（MS 各波段加权平均，默认等权重）
+4. 将真实 Pan 的均值/方差线性匹配到 I，避免融合后整体亮度偏移
+5. 对每个 MS 波段计算 GS 增益并注入 Pan 的高频细节
+
+```bash
+curl -X POST http://localhost:8100/tools/pansharpen/ \
+  -F "ms=@multispectral.tif" \
+  -F "pan=@panchromatic.tif" \
+  -o output_Pansharpen.tiff
+```
+
+#### 参数
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `ms` | file | — | 低分辨率多光谱影像（.tif / .tiff，多波段），需与 Pan 配准到同一坐标系，地理范围必须完全覆盖 Pan |
+| `pan` | file | — | 高分辨率全色影像（.tif / .tiff，单波段） |
+| `weights` | str | 不传=等权重 | MS 各波段合成全色分量的权重，逗号分隔，长度需等于 MS 波段数 |
+
 ### 几何校正
 
 统一接口，根据 `reference` 的文件类型自动切换模式：
@@ -196,6 +227,7 @@ curl -X POST http://localhost:8100/tools/changedet/ \
 
 - **Web 框架**: FastAPI
 - **影像处理**: OpenCV（含相位相关配准）
+- **全色锐化**: rasterio.warp 重采样对齐 + Gram-Schmidt 融合
 - **几何校正**: rasterio.warp 配合 RPC 模型（含 DEM 地形校正）
 - **TIFF 读写**: rasterio (GDAL)
 - **目标检测**: ultralytics (YOLOv8-OBB)

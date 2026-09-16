@@ -56,3 +56,8 @@ ORTHO_DEFAULT_HEIGHT = 0.0            # 无 DEM 时的默认高程（米）
 ORTHO_DEFAULT_RESAMPLING = "bilinear" # 重采样方法
 
 
+
+# === 全色锐化（Pan Sharpening，Gram-Schmidt） ===
+PANSHARPEN_OUTPUT_SUFFIX = "_Pansharpen"
+PANSHARPEN_RESAMPLING = "cubic"        # MS 重采样到 Pan 网格的方法
+PANSHARPEN_MIN_COVERAGE_RATIO = 0.999    # MS 范围覆盖 Pan 范围的最小比例，低于此值视为未完全重叠

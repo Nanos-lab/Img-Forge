@@ -1,14 +1,14 @@
 # ImgForge 开发规范
 
-> 本文档供 AI 助手和开发者阅读，涵盖项目架构、环境配置、模块规范和代码风格。新增模块时请严格遵循本文档。
+> 本文档供 AI 助手和开发者阅读，涵盖模块规范和代码风格。新增模块时请严格遵循本文档。
 
 ---
 
-## 1. 项目概述
+## 1. 核心原则
 
-ImgForge 是一个模块化遥感影像处理 API 服务，面向 TIFF 格式遥感影像，提供影像增强、目标检测、裁剪、压缩等工具。项目以 FastAPI 为 Web 层、OpenCV 为像素处理引擎、rasterio 为 TIFF 读写驱动、ultralytics 为深度学习推理引擎。
+本文档补充 [README.md](README.md) 未覆盖的内容：项目架构、模块依赖规则、编码规范。项目简介、快速开始、工具列表见 README。
 
-**核心原则：**
+**新增模块时的核心原则：**
 - 每个工具一个独立文件夹，内部按 `router` / `service` / `schemas` 三层分离
 - 一个文件只对应一类业务，不混合无关逻辑
 - 所有像素级操作在 `[0, 1]` 浮点空间内完成，输入输出归一化/反归一化集中处理
@@ -30,12 +30,7 @@ ImgForge 是一个模块化遥感影像处理 API 服务，面向 TIFF 格式遥
 
 ### 2.2 创建/重建环境
 
-```bash
-conda create -n imgforge python=3.11
-conda activate imgforge
-conda install -c conda-forge rasterio        # GDAL 系走 conda-forge，避免编译问题
-pip install -r requirements.txt
-```
+环境搭建命令见 [README.md 快速开始](README.md#快速开始)，此处补充 `conda install rasterio` 时的注意事项：GDAL 系依赖走 conda-forge，避免编译问题。
 
 ### 2.3 依赖清单
 
@@ -62,27 +57,41 @@ ImgForge/
 ├── app/
 │   ├── __init__.py              # 空或一行注释
 │   ├── main.py                  # FastAPI 入口：创建 app、注册路由、异常处理
-│   ├── core/                    # 公共层（所有模块共享）
+│   ├── core/                    # 应用基础设施层（所有模块共享，不含业务算法）
 │   │   ├── __init__.py
 │   │   ├── config.py            #   全局配置常量
 │   │   ├── exceptions.py        #   异常类层次
 │   │   └── responses.py         #   统一响应模型
-│   └── tools/                   # 工具模块目录
+│   ├── shared/                  # 共享算法层：跨工具复用的纯函数，无路由
+│   │   ├── __init__.py
+│   │   └── <shared_name>/       # 如 img_registration（相位相关配准）
+│   │       ├── __init__.py      #   导出纯函数
+│   │       └── service.py       #   算法实现，不依赖 FastAPI，不依赖 tools/
+│   └── tools/                   # 工具模块目录（业务层，均暴露 API 端点）
 │       ├── __init__.py
 │       └── <tool_name>/         # 每个工具一个文件夹
-│           ├── __init__.py      #   导出 router（API 工具）或 导出纯函数（内部模块）
-│           ├── router.py        #   API 路由定义（API 工具）
+│           ├── __init__.py      #   导出 router
+│           ├── router.py        #   API 路由定义
 │           ├── service.py       #   核心处理算法（纯函数）
-│           ├── schemas.py       #   请求/响应 Pydantic 模型（API 工具）
+│           ├── schemas.py       #   请求/响应 Pydantic 模型
 │           └── ...              #   可含额外内部模块（如 detector.py, tiler.py）
-│
-│   # 注：tools 下也包含无路由的内部模块（如 img_registration），
-│   # 它们不暴露 API 端点，但可被其他工具模块 import 复用。
 ├── test/                        # 测试素材
 ├── requirements.txt
 ├── README.md                    # 用户文档（API 列表 + 参数说明）
 └── DEVELOPMENT.md               # 本文档（开发规范）
 ```
+
+**模块依赖方向（禁止反向或同层互相依赖）：**
+
+```
+tools/<tool_a>   ─┐
+tools/<tool_b>   ─┼──→  shared/<shared_x>  ──→  core/
+tools/<tool_c>   ─┘
+```
+
+- `tools/` 下的业务模块之间**禁止相互 import**（如 `img_pansharpen` 不能 `import` `img_mosaic` 的任何内容）。
+- 两个及以上业务模块需要复用同一段逻辑时，把公共部分下沉为 `shared/` 下的新模块，让各业务模块分别调用它，而不是互相调用。
+- `shared/` 下的模块只能依赖 `core/`，不能 import 任何 `tools/` 下的内容，保证依赖方向单向、无环。
 
 ### 3.2 数据流
 
@@ -99,7 +108,7 @@ ImgForge/
 - `schemas.py` 只定义数据结构，**不含任何处理逻辑**
 - **返回类型不限于 TIFF 文件**：模块可返回 `FileResponse`（如影像增强）、`JSONResponse`（如目标检测 GeoJSON）或其他 Response 类型
 - **模块可含额外内部文件**：复杂算法可拆成多个子模块（如 `detector.py`、`tiler.py` 等），但入口仍通过 `service.py` 对外暴露
-- **内部模块（无路由）**：部分模块仅提供可复用的算法，不暴露 API 端点（如 `img_registration`）。它们没有 `router.py` 和 `schemas.py`，`__init__.py` 直接导出纯函数，供其他工具模块 import 调用。
+- **共享算法模块（`app/shared/` 下，无路由）**：不暴露 API 端点，只导出纯函数（如 `img_registration` 的 `phase_correlate`）。它们没有 `router.py` 和 `schemas.py`，供 `tools/` 下的业务模块 import 调用。新增共享逻辑必须放在这里，不允许业务模块之间直接相互 import。
 
 ### 3.3 路由注册
 
@@ -315,7 +324,7 @@ app.include_router(my_tool_router)
 
 ---
 
-## 5. core 层规范
+## 5. core 层与 shared 层规范
 
 ### 5.1 config.py
 
@@ -339,6 +348,18 @@ class XxxError(ImageProcessingError):
 ### 5.3 responses.py
 
 存放统一的 `APIResponse` / `ErrorResponse` 模型。工具特有的响应数据模型（如处理结果元数据）应定义在 `responses.py` 中，不放在各自模块的 `schemas.py` 里，便于跨模块复用。
+
+
+### 5.4 shared/ 共享算法层
+
+存放跨多个 `tools/` 模块复用的纯函数逻辑（如相位相关配准 `img_registration`）。
+
+**规范：**
+- 每个共享模块一个文件夹，结构类似 `tools/`，但**不含** `router.py` 和 `schemas.py`
+- `__init__.py` 直接导出纯函数（如 `from app.shared.img_registration.service import phase_correlate`）
+- `service.py` 只做纯数据处理，不依赖 FastAPI / HTTP 对象，也不 import 任何 `tools/` 下的模块
+- 何时新建共享模块：当**两个或以上**业务模块需要同一段逻辑时，把公共部分下沉到这里，而不是让业务模块之间互相 import
+- `tools/` 下的业务模块之间**禁止相互 import**；跨模块复用的唯一合法路径是通过 `shared/`
 
 ---
 
@@ -384,11 +405,7 @@ class XxxError(ImageProcessingError):
 
 ## 7. 启动 & 调试
 
-```bash
-conda activate imgforge
-cd e:/Project/img-det/ImgForge
-uvicorn app.main:app --reload --port 8100
-```
+启动命令见 [README.md 快速开始](README.md#快速开始)。调试技巧：
 
 - Swagger UI: `http://localhost:8100/docs`
 - 健康检查: `curl http://localhost:8100/`
@@ -405,6 +422,7 @@ uvicorn app.main:app --reload --port 8100
 - [ ] 实现 `service.py`（纯函数，含 docstring 和类型注解）
 - [ ] 实现 `router.py`（参数校验 + 文件暂存 + 调用 service + 清理 + 返回）
 - [ ] 如有额外内部模块（如 detector.py），一并创建
+- [ ] 需要复用其他工具的逻辑时，确认逻辑已下沉到 `app/shared/`，不直接 import 其他 `tools/` 模块
 - [ ] 在 `main.py` 中 import 并 include_router
 - [ ] 如有新异常，在 `core/exceptions.py` 中定义
 - [ ] 如有新配置项，在 `core/config.py` 中定义

@@ -28,7 +28,7 @@ from app.core.config import (
     REGISTRATION_MIN_OVERLAP,
 )
 from app.core.exceptions import MosaicError
-from app.tools.img_registration import phase_correlate
+from app.shared.img_registration import phase_correlate
 
 
 # ============================================================

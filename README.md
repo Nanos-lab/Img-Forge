@@ -17,6 +17,20 @@ uvicorn app.main:app --reload --port 8100
 
 访问 `http://localhost:8100/docs` 查看交互式 API 文档。
 
+## 环境变量（.env）
+
+图片信息提取模块（`img_info_extract`）依赖大模型 API，需在项目根目录创建 `.env` 文件（已加入 `.gitignore`，不会被提交）：
+
+```bash
+# DeepSeek 或兼容 OpenAI 协议的大模型 API
+DEEPSEEK_API_KEY=sk-xxxxxxxx
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1   # 可选，默认官方地址
+DEEPSEEK_MODEL=deepseek-chat                     # 可选，默认 deepseek-chat
+```
+
+其他工具模块不依赖 `.env`，只有使用 `/tools/info-extract/` 时才需要配置。
+
+
 ## 项目结构
 
 ```
@@ -28,7 +42,8 @@ ImgForge/
 │   │   ├── exceptions.py        #   自定义异常
 │   │   └── responses.py         #   统一响应模型
 │   ├── shared/                  # 共享算法层（跨工具复用，无 API 端点）
-│   │   └── img_registration/    #   相位相关配准
+│   │   ├── img_registration/    #   相位相关配准
+│   │   └── llm_client/          #   大模型调用客户端（连接/配置，不含业务逻辑）
 │   └── tools/                   # 工具模块（每个工具一个文件夹）
 │       ├── img_enhance/         #   影像增强（旧）
 │       ├── img_enhance_2/       #   影像增强（Cesium 风格，当前启用）
@@ -37,7 +52,8 @@ ImgForge/
 │       ├── img_mosaic/          #   影像拼接
 │       ├── img_pansharpen/      #   全色锐化（多光谱 + 全色融合）
 │       ├── img_ortho/           #   几何校正（正射校正 / 配准）
-│       └── img_changedet/       #   变化检测
+│       ├── img_changedet/       #   变化检测
+│       └── img_info_extract/    #   图片信息提取（基于大模型视觉理解）
 ├── test/                        # 测试素材
 ├── requirements.txt
 └── README.md
@@ -56,6 +72,7 @@ ImgForge/
 | 全色锐化 | `POST /tools/pansharpen/` | 低分辨率多光谱 + 高分辨率全色融合，基于 Gram-Schmidt 算法，兼顾光谱与空间细节 |
 | 几何校正 | `POST /tools/ortho/` | 正射校正（RPC）/ 图像配准（参考图），根据 `reference` 类型自动切换 |
 | 变化检测 | `POST /tools/changedet/` | 基于 TinyCD 深度学习模型的双时相遥感影像变化检测，输出 GeoJSON 格式变化区域 |
+| 图片信息提取 | `POST /tools/info-extract/` | 基于大模型视觉理解，提取目标名称 / 标题 / 分辨率 / 平台 / 时间 / 比例尺，图中未标注字段返回 null |
 
 ### 影像增强
 
@@ -223,6 +240,39 @@ curl -X POST http://localhost:8100/tools/changedet/ \
 | `threshold` | float | Otsu 自动 | 变化概率二值化阈值 [0, 1] |
 | `min_area` | int | 自动 | 最小变化区域面积（像素） |
 
+
+### 图片信息提取
+
+上传单张图片，基于大模型视觉理解提取以下 6 项信息：目标名称、标题、分辨率、平台、时间、比例尺。仅依据图片中实际可见的文字/标注作答，找不到明确依据的字段返回 `null`，不做推测或编造。
+
+支持 `.jpg` / `.jpeg` / `.png` / `.tif` / `.tiff` 输入，内部统一转码为 JPEG（按最长边 2048px 等比缩放）后上传给模型，因此大幅遥感 TIFF 也可直接使用。
+
+```bash
+curl -X POST http://localhost:8100/tools/info-extract/ \
+  -F "file=@input.jpg"
+```
+
+响应示例：
+
+```json
+{
+  "target": "某机场",
+  "title": "某机场卫星影像图",
+  "resolution": null,
+  "platform": null,
+  "time": "2006年9月10日10时41分",
+  "scale": "0—80米"
+}
+```
+
+#### 参数
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `file` | file | — | 待提取信息的图片（.jpg/.jpeg/.png/.tif/.tiff） |
+
+依赖 `.env` 中配置的大模型 API，见[环境变量](#环境变量env)一节。
+
 ## 技术栈
 
 - **Web 框架**: FastAPI
@@ -232,3 +282,4 @@ curl -X POST http://localhost:8100/tools/changedet/ \
 - **TIFF 读写**: rasterio (GDAL)
 - **目标检测**: ultralytics (YOLOv8-OBB)
 - **变化检测**: PyTorch + TinyCD（EfficientNet-B4）
+- **图片信息提取**: OpenAI SDK（兼容 DeepSeek 等 OpenAI 协议 API）视觉理解

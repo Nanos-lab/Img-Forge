@@ -45,6 +45,8 @@
 | pydantic | ≥2.0.0 | 数据校验 | pip |
 | ultralytics | ≥8.0.0 | YOLOv8-OBB 目标检测 | pip |
 | pytorch | (ultralytics 自动安装) | 深度学习框架 | pip |
+| openai | ≥1.0.0 | 大模型 API 客户端（图片信息提取） | pip |
+| python-dotenv | ≥1.0.0 | 读取 .env 环境变量 | pip |
 
 ---
 

@@ -11,11 +11,18 @@ from app.tools.img_ortho import router as ortho_router
 from app.tools.img_changedet import router as changedet_router
 from app.tools.img_denoise import router as denoise_router
 from app.tools.img_pansharpen import router as pansharpen_router
+from app.tools.img_info_extract import router as info_extract_router
 
 app = FastAPI(
     title="ImgForge",
     version="0.5.0",
     description="模块化遥感影像处理 API —— 影像增强、目标检测、影像拼接、正射校正、变化检测等工具集",
+    # 禁用自动斜杠重定向：所有工具路由均以 "/" 结尾定义，客户端请求若缺少
+    # 结尾斜杠，默认行为会返回 307 重定向，部分 HTTP 客户端在带文件体的
+    # POST 请求上处理重定向时会导致 multipart body 损坏（表现为
+    # "There was an error parsing the body"）。禁用后缺斜杠的请求直接
+    # 返回 404，避免这类隐蔽问题。
+    redirect_slashes=False,
 )
 
 # ---- 注册工具路由 ----
@@ -26,6 +33,7 @@ app.include_router(ortho_router)
 app.include_router(changedet_router)
 app.include_router(denoise_router)
 app.include_router(pansharpen_router)
+app.include_router(info_extract_router)
 
 
 # ---- 全局异常处理 ----

@@ -92,3 +92,19 @@ class PansharpenError(ImageProcessingError):
     def __init__(self, detail: str = "全色锐化处理失败"):
         self.detail = detail
         super().__init__(f"全色锐化处理失败: {detail}")
+
+
+class LLMClientError(ImageProcessingError):
+    """大模型客户端调用失败（共享层通用异常）。"""
+
+    def __init__(self, detail: str = "大模型调用失败"):
+        self.detail = detail
+        super().__init__(f"大模型调用失败: {detail}")
+
+
+class InfoExtractError(ImageProcessingError):
+    """图片信息提取处理失败。"""
+
+    def __init__(self, detail: str = "图片信息提取失败"):
+        self.detail = detail
+        super().__init__(f"图片信息提取失败: {detail}")

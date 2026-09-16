@@ -61,3 +61,9 @@ ORTHO_DEFAULT_RESAMPLING = "bilinear" # 重采样方法
 PANSHARPEN_OUTPUT_SUFFIX = "_Pansharpen"
 PANSHARPEN_RESAMPLING = "cubic"        # MS 重采样到 Pan 网格的方法
 PANSHARPEN_MIN_COVERAGE_RATIO = 0.999    # MS 范围覆盖 Pan 范围的最小比例，低于此值视为未完全重叠
+
+# === 图片信息提取 ===
+INFO_EXTRACT_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
+INFO_EXTRACT_MAX_SIDE = 2048            # 上传前等比缩放的最长边像素上限
+INFO_EXTRACT_JPEG_QUALITY = 90          # 转码为 JPEG 时的质量
+INFO_EXTRACT_MAX_TOKENS = 1000          # 模型返回的最大 token 数
